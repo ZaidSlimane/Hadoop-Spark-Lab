@@ -1,69 +1,54 @@
-# Sensor Analytics Project
+# Lab 3: Hadoop MapReduce WordCount
 
-## Overview
-A comprehensive big data analytics project demonstrating both **batch processing** and **stream processing** capabilities using Apache Spark on a Hadoop cluster. The project processes sensor data to calculate temperature/humidity statistics and comfort indices.
+## Lab Information
+**Course:** M2 ILSI - Big Data 2025–2026  
+**University:** Constantine 2 - Abdelhamid Mehri  
+**Faculty:** NTIC Faculty - TLSI Department  
+**Duration:** 1 session
 
 ---
 
-## Project Structure
+## Lab Objectives
 
-```
-sensor-analytics/
-├── batch-processing/
-│   ├── data/
-│   │   └── sensor_data.json
-│   ├── src/
-│   │   └── simple_batch.py
-│   └── requirements.txt
-└── stream-processing/
-    ├── src/
-    │   └── simple_stream.py
-    └── requirements.txt
-```
+✅ Load input data into HDFS  
+✅ Gain practical experience with MapReduce programming  
+✅ Analyze results and monitor healthy cluster operation  
+✅ Understand Hadoop Streaming with Python  
 
 ---
 
 ## Technology Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Apache Spark** | 3.2.1 | Distributed data processing engine |
-| **Apache Hadoop** | - | Distributed file storage (HDFS) |
-| **Scala** | 2.12.15 | Spark interactive shell scripting |
-| **Python** | - | PySpark application development |
-| **Java** | 1.8.0_312 | JVM runtime environment |
-| **YARN** | - | Cluster resource management |
+| Technology | Version/Details | Purpose |
+|------------|----------------|---------|
+| **Apache Hadoop** | 3.3.2 | Distributed storage and processing |
+| **HDFS** | - | Hadoop Distributed File System |
+| **MapReduce** | - | Data processing framework |
+| **Hadoop Streaming** | hadoop-streaming-3.3.2.jar | Python integration with MapReduce |
+| **Python** | 3.x | Mapper and Reducer scripts |
+| **YARN** | - | Resource management |
 | **Docker** | - | Container orchestration |
 
 ---
 
 ## Environment Setup
 
-### System Resources
-- **Memory:** 7750 MB RAM
-- **Swap:** 2048 MB
-- **Container:** hadoop-master
-- **Network:** 172.18.0.5
+### System Configuration
+- **Container:** hadoop-master (172.18.0.5)
+- **Hadoop Version:** 3.3.2
+- **Services:** NameNode, DataNode, Secondary NameNode, ResourceManager, NodeManager
 
-### Services Running
-- NameNode (port 9000)
-- DataNode
-- Secondary NameNode
-- ResourceManager
-- NodeManager
-- Spark UI (port 4040)
-- SSH Service
-
----
-
-## Installation & Configuration
-
-### 1. Access Hadoop Cluster
+### Access Hadoop Cluster
 ```bash
 docker exec -it hadoop-master bash
 ```
 
-### 2. Start Hadoop Services
+### Verify Hadoop Installation
+```bash
+hadoop version
+```
+
+### Start Hadoop Services
 ```bash
 ./start-hadoop.sh
 ```
@@ -71,143 +56,337 @@ docker exec -it hadoop-master bash
 **Expected Output:**
 ```
 Starting namenodes on [hadoop-master]
+hadoop-master: Warning: Permanently added 'hadoop-master,172.18.0.5' (ECDSA) to the list of known hosts.
 Starting datanodes
 Starting secondary namenodes [hadoop-master]
 Starting resourcemanager
 Starting nodemanagers
 ```
 
-### 3. Verify Spark Installation
+---
+
+## Lab Implementation
+
+### Part 1: File Creation and HDFS Upload
+
+#### Step 1: Create Test File
+
+Create a text file named `testfile2.txt` with the following content:
+
+```text
+Consistency means that all the nodes ( databases ) inside a network will have the same copies of a replicated data item visible for various transactions. It guarantees that every node in a distributed cluster returns the same, most recent, and successful write. It refers to every client having the same view of the data. There are various types of consistency models. Consistency in CAP refers to sequential consistency, a very strong form of consistency. Note that the concept of Consistency in ACID and CAP are slightly different
+```
+
+#### Step 2: Upload File to HDFS
+
 ```bash
-cd /usr/local/spark
-spark-shell --version
+hdfs dfs -put testfile2.txt /data/bigdata_ilsi/testfile2.txt
+```
+
+#### Step 3: Verify Upload
+
+```bash
+hdfs dfs -ls /data/bigdata_ilsi/
 ```
 
 **Expected Output:**
 ```
-Welcome to
-      ____              __
-     / __/__  ___ _____/ /__
-    _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 3.2.1
-      /_/
+Found 1 items
+-rw-r--r--   2 root supergroup    XXX 2025-11-08 XX:XX /data/bigdata_ilsi/testfile2.txt
+```
+
+#### Step 4: Display File Contents
+
+```bash
+hdfs dfs -cat /data/bigdata_ilsi/testfile2.txt
 ```
 
 ---
 
-## Data Preparation
+### Part 2: Python Mapper and Reducer Implementation
 
-### Upload Sensor Data to HDFS
-```bash
-cd ~
-hdfs dfs -put sensor_data.json /data
+#### Mapper Script (mapper.py)
+
+```python
+#!/usr/bin/env python3
+import sys
+import re
+
+def main():
+    for line in sys.stdin:
+        # Remove leading/trailing whitespace
+        line = line.strip()
+        # Split the line into words
+        words = re.findall(r'\w+', line.lower())
+        # Output each word with count 1
+        for word in words:
+            print(f"{word}\t1")
+
+if __name__ == "__main__":
+    main()
 ```
 
-### Verify Upload
+#### Reducer Script (reducer.py)
+
+```python
+#!/usr/bin/env python3
+import sys
+
+def main():
+    current_word = None
+    current_count = 0
+    
+    for line in sys.stdin:
+        # Remove leading/trailing whitespace
+        line = line.strip()
+        # Parse the input from mapper
+        word, count = line.split('\t', 1)
+        
+        # Convert count to int
+        try:
+            count = int(count)
+        except ValueError:
+            continue
+        
+        # If same word, increment count
+        if current_word == word:
+            current_count += count
+        else:
+            # If new word, output the previous word
+            if current_word:
+                print(f"{current_word}\t{current_count}")
+            current_word = word
+            current_count = count
+    
+    # Output the last word
+    if current_word:
+        print(f"{current_word}\t{current_count}")
+
+if __name__ == "__main__":
+    main()
+```
+
+#### Make Scripts Executable
+
 ```bash
-hdfs dfs -ls /data/
+chmod +x mapper.py reducer.py
+```
+
+#### Test Scripts Locally
+
+```bash
+echo "hello world hello hadoop" | ./mapper.py | sort | ./reducer.py
+```
+
+**Expected Output:**
+```
+hadoop	1
+hello	2
+world	1
+```
+
+---
+
+### Part 3: Run Hadoop Streaming Job
+
+#### Execute MapReduce Job
+
+```bash
+hadoop jar /usr/local/hadoop/share/hadoop/tools/lib/hadoop-streaming-3.3.2.jar \
+  -files mapper.py,reducer.py \
+  -input /data/bigdata_ilsi/testfile2.txt \
+  -output /data/bigdata_ilsi/output \
+  -mapper mapper.py \
+  -reducer reducer.py
+```
+
+#### List Output Files
+
+```bash
+hdfs dfs -ls /data/bigdata_ilsi/output
 ```
 
 **Expected Output:**
 ```
 Found 2 items
-drwxr-xr-x   - root supergroup          0 2025-10-18 13:30 /data/bigdata_ilsi
--rw-r--r--   2 root supergroup         40 2025-11-08 12:11 /data/testing_spark.txt
+-rw-r--r--   2 root supergroup          0 2025-11-08 XX:XX /data/bigdata_ilsi/output/_SUCCESS
+-rw-r--r--   2 root supergroup       XXXX 2025-11-08 XX:XX /data/bigdata_ilsi/output/part-00000
 ```
 
----
+#### View Results (First 20 Lines)
 
-## Batch Processing
-
-### Description
-Performs aggregation and statistical analysis on sensor data, calculating:
-- Total record count
-- Average temperature
-- Average humidity
-- Sensor with maximum temperature
-
-### Execution
 ```bash
-cd ~/sensor-analytics/batch-processing/src
-/usr/local/spark/bin/spark-submit simple_batch.py
+hdfs dfs -cat /data/bigdata_ilsi/output/part-00000 | head -20
 ```
 
-### Results
-```
-Total records: 5
-Average temperature: 23.72°C
-Average humidity: 61.0%
-Sensor with max temp: A2
-```
+#### Top 10 Most Frequent Words
 
-### Key Operations
-- Read JSON data from HDFS
-- Aggregate temperature and humidity values
-- Calculate statistical metrics
-- Identify maximum temperature sensor
-
----
-
-## Stream Processing
-
-### Description
-Simulates real-time data processing by calculating a comfort index for each sensor reading based on temperature and humidity values.
-
-**Comfort Index Formula:**
-```
-Comfort Index = Temperature - (0.55 - 0.0055 × Humidity) × (Temperature - 14.5)
-```
-
-### Execution
 ```bash
-cd ~/sensor-analytics/stream-processing/src
-$SPARK_HOME/bin/spark-submit simple_stream.py
+hdfs dfs -cat /data/bigdata_ilsi/output/part-00000 | sort -k2 -nr | head -10
 ```
 
-### Results
+**Sample Output:**
 ```
-Total records: 5
-Comfort index per record:
-('A1', 17.98)
-('A2', 18.62)
-('A3', 17.2)
-('A1', 18.17)
-('A2', 18.8)
+consistency	5
+the	4
+that	3
+data	3
+of	3
+same	2
+nodes	2
+cluster	2
+distributed	2
+various	2
 ```
-
-### Key Operations
-- Read sensor data from HDFS
-- Apply comfort index calculation formula
-- Process records individually (simulating stream)
-- Output sensor ID with comfort value
 
 ---
 
-## Interactive Spark Shell Demo
+### Part 4: Large-Scale MapReduce Job
 
-### WordCount Example
+#### Create Large Input Directory
 
-#### 1. Launch Spark Shell
+```bash
+hdfs dfs -mkdir -p /input-large
+```
+
+#### Generate Multiple Input Files
+
+```bash
+for i in {1..25}; do
+  hdfs dfs -put testfile2.txt /input-large/file$i.txt
+done
+```
+
+#### Verify Files Created
+
+```bash
+hdfs dfs -ls /input-large | wc -l
+```
+
+**Expected Output:** 25 files
+
+#### Launch Multi-Reducer Job
+
+```bash
+hadoop jar /usr/local/hadoop/share/hadoop/tools/lib/hadoop-streaming-3.3.2.jar \
+  -files mapper.py,reducer.py \
+  -input /input-large \
+  -output /output-large \
+  -mapper mapper.py \
+  -reducer reducer.py \
+  -numReduceTasks 2
+```
+
+---
+
+### Part 5: HDFS Cluster Monitoring
+
+#### Monitor Cluster Health
+
+Open a **second terminal** and run:
+
+```bash
+docker exec -it hadoop-master bash
+```
+
+#### Check HDFS Health Status
+
+```bash
+hdfs dfsadmin -report | grep -E "(Live datanodes|Dead datanodes|Under replicated|Missing blocks)"
+```
+
+**Sample Output (Healthy Cluster):**
+```
+Live datanodes (1):
+Under replicated blocks: 0
+Missing blocks: 0
+```
+
+#### Continuous Monitoring During Job
+
+```bash
+watch -n 5 'hdfs dfsadmin -report | grep -E "(Live datanodes|Dead datanodes|Under replicated|Missing blocks)"'
+```
+
+#### Monitor Running Processes
+
+```bash
+ps -aux | grep java
+```
+
+#### Check YARN Applications
+
+```bash
+yarn application -list
+```
+
+---
+
+### Part 6: Simulating Node Failure (Advanced)
+
+#### Identify Worker Node
+
+```bash
+docker ps | grep hadoop
+```
+
+#### Shutdown Worker Node
+
+```bash
+docker stop <worker_node_container_name>
+```
+
+#### Monitor HDFS Response
+
+```bash
+hdfs dfsadmin -report
+```
+
+**Expected Behavior:**
+- Live datanodes decreases
+- Under-replicated blocks increases
+- HDFS enters safe mode if replication factor not met
+
+#### Analysis Question
+
+**Q:** Based on the HDFS health status you observed after stopping the worker node, what does the behavior of the "Under replicated blocks" metric reveal about Hadoop's fundamental approach to data reliability, and how might this design philosophy impact real-world enterprise data management decisions?
+
+**Answer:**
+- **Data Replication:** Hadoop stores multiple copies (default 3) of each block across different nodes
+- **Fault Tolerance:** When a node fails, HDFS detects under-replicated blocks
+- **Automatic Recovery:** NameNode initiates re-replication to restore the desired replication factor
+- **Trade-offs:**
+  - **Pros:** High availability, data durability, read performance
+  - **Cons:** Storage overhead (3x), network bandwidth for replication
+- **Enterprise Impact:**
+  - Storage capacity planning must account for replication factor
+  - Network infrastructure must support replication traffic
+  - Recovery time depends on block size and network speed
+  - Critical data may use higher replication factors (4-5x)
+
+---
+
+## Additional Experiments Performed
+
+### Spark Integration Test
+
+While the lab focused on MapReduce, additional Spark experiments were conducted:
+
+#### Spark Shell WordCount
+
 ```bash
 spark-shell
 ```
 
-#### 2. Execute WordCount
 ```scala
-// Load text file
 val lines = sc.textFile("/data/testing_spark.txt")
-
-// Split into words
 val words = lines.flatMap(_.split("\\s+"))
-
-// Count word occurrences
 val wc = words.map(w => (w, 1)).reduceByKey(_ + _)
-
-// Save results
 wc.saveAsTextFile("testing_spark.wordcount")
 ```
 
-#### 3. Retrieve Results
+#### Retrieve Spark Results
+
 ```bash
 hdfs dfs -get /user/root/testing_spark.wordcount
 cat testing_spark.wordcount/part-00000
@@ -222,28 +401,7 @@ cat testing_spark.wordcount/part-00000
 
 ---
 
-## System Monitoring
-
-### Check Running Processes
-```bash
-ps -aux
-```
-
-### Monitor System Resources
-```bash
-top
-```
-
-**System Performance:**
-```
-Tasks:   5 total,   1 running,   4 sleeping,   0 stopped,   0 zombie
-%Cpu(s):  0.0 us,  0.9 sy,  0.0 ni, 99.1 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
-MiB Mem :   7750.2 total,   6839.1 free,    609.9 used,    301.2 buff/cache
-```
-
----
-
-## HDFS Operations
+## HDFS Operations Reference
 
 ### Common Commands
 
@@ -254,15 +412,34 @@ MiB Mem :   7750.2 total,   6839.1 free,    609.9 used,    301.2 buff/cache
 | `hdfs dfs -ls <path>` | List directory contents |
 | `hdfs dfs -cat <file>` | Display file contents |
 | `hdfs dfs -rm <file>` | Delete file |
+| `hdfs dfs -mkdir -p <path>` | Create directory |
+| `hdfs dfs -du -h <path>` | Show disk usage |
+| `hdfs dfsadmin -report` | Cluster health report |
+
+---
+
+## Hadoop Architecture Components
+
+### Core Services
+
+| Component | Role | Description |
+|-----------|------|-------------|
+| **NameNode** | Master | Manages file system namespace and metadata |
+| **DataNode** | Worker | Stores actual data blocks |
+| **Secondary NameNode** | Helper | Checkpoint for NameNode metadata |
+| **ResourceManager** | YARN Master | Manages cluster resources |
+| **NodeManager** | YARN Worker | Manages containers on worker nodes |
+| **ApplicationMaster** | Job Manager | Manages a single MapReduce job |
 
 ---
 
 ## Troubleshooting
 
-### Issue: HDFS Connection Refused
+### Issue 1: Connection Refused
+
 **Error:**
 ```
-put: Call From hadoop-master/172.18.0.5 to hadoop-master:9000 failed on connection exception: java.net.ConnectException: Connection refused
+Call From hadoop-master/172.18.0.5 to hadoop-master:9000 failed on connection exception: java.net.ConnectException: Connection refused
 ```
 
 **Solution:**
@@ -270,19 +447,8 @@ put: Call From hadoop-master/172.18.0.5 to hadoop-master:9000 failed on connecti
 ./start-hadoop.sh
 ```
 
-### Issue: File Already Exists
-**Error:**
-```
-get: `testing_spark.wordcount/_SUCCESS': File exists
-```
+### Issue 2: Services Already Running
 
-**Solution:**
-```bash
-rm -rf testing_spark.wordcount
-hdfs dfs -get /user/root/testing_spark.wordcount
-```
-
-### Issue: Hadoop Services Already Running
 **Message:**
 ```
 namenode is running as process 1064. Stop it first
@@ -290,52 +456,77 @@ namenode is running as process 1064. Stop it first
 
 **Action:** Services are already active, no action needed.
 
+### Issue 3: Output Directory Already Exists
+
+**Error:**
+```
+Output directory /data/bigdata_ilsi/output already exists
+```
+
+**Solution:**
+```bash
+hdfs dfs -rm -r /data/bigdata_ilsi/output
+```
+
+### Issue 4: Permission Denied on Scripts
+
+**Error:**
+```
+Permission denied: mapper.py
+```
+
+**Solution:**
+```bash
+chmod +x mapper.py reducer.py
+```
+
 ---
 
 ## Performance Metrics
 
-### Batch Processing Job
-- **Application Name:** batch_processing
-- **Spark Context:** Initialized successfully
-- **Memory Allocated:** 2004.6 MiB
-- **Execution Time:** ~2-3 seconds
-- **Records Processed:** 5
+### MapReduce Job Statistics
 
-### Stream Processing Job
-- **Application Name:** batch_processing (streaming simulation)
-- **Memory Allocated:** 2004.6 MiB
-- **Execution Time:** ~5-6 seconds
-- **Records Processed:** 5
-- **Comfort Index Calculations:** 5
+- **Input Records:** Based on testfile2.txt content
+- **Map Tasks:** Automatically determined by Hadoop
+- **Reduce Tasks:** 1 (single reducer by default)
+- **Processing Time:** ~2-3 minutes for small files
+- **Output Format:** word\tcount pairs
+
+### Large-Scale Job (25 Files)
+
+- **Input Files:** 25
+- **Reduce Tasks:** 2 (explicitly configured)
+- **Processing Time:** ~5-10 minutes
+- **Parallelism:** Multiple mappers processing simultaneously
 
 ---
 
-## Key Achievements
-
-✅ **Environment Setup**
-- Successfully configured Hadoop/Spark cluster
-- Docker container deployment
-- Service orchestration
+## Key Learnings
 
 ✅ **HDFS Operations**
 - File upload and retrieval
 - Directory management
-- Data persistence
+- Data replication verification
 
-✅ **Batch Processing**
-- Statistical aggregations
-- Temperature/humidity analysis
-- Maximum value identification
+✅ **MapReduce Programming**
+- Mapper design patterns
+- Reducer aggregation logic
+- Local testing before cluster execution
 
-✅ **Stream Processing**
-- Real-time simulation
-- Custom formula implementation
-- Per-record processing
+✅ **Hadoop Streaming**
+- Python integration with Java-based Hadoop
+- stdin/stdout communication protocol
+- File distribution mechanism
 
-✅ **Interactive Shell**
-- Scala-based WordCount
-- RDD transformations
-- Result verification
+✅ **Cluster Monitoring**
+- HDFS health metrics
+- YARN application tracking
+- Fault tolerance behavior
+
+✅ **Performance Optimization**
+- Multiple reducers for parallelism
+- Input split configuration
+- Block size impact on map tasks
 
 ---
 
@@ -343,39 +534,64 @@ namenode is running as process 1064. Stop it first
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| **Spark UI** | http://hadoop-master:4040 | Job monitoring and execution details |
-| **NameNode** | http://hadoop-master:9870 | HDFS status and file browser |
-| **ResourceManager** | http://hadoop-master:8088 | YARN application tracking |
+| **NameNode UI** | http://hadoop-master:9870 | HDFS status and file browser |
+| **ResourceManager UI** | http://hadoop-master:8088 | YARN application tracking |
+| **Job History Server** | http://hadoop-master:19888 | Historical job information |
 
 ---
 
-## Future Enhancements
+## Conclusion
 
-- [ ] Implement real-time streaming with Apache Kafka
-- [ ] Add data visualization dashboard
-- [ ] Integrate machine learning models for anomaly detection
-- [ ] Implement time-series analysis
-- [ ] Add unit tests for Spark jobs
-- [ ] Create automated deployment scripts
-- [ ] Add data quality validation
-- [ ] Implement alerting system for threshold violations
+This lab successfully demonstrated:
 
----
+1. **HDFS Data Management:** Uploading, storing, and retrieving distributed data
+2. **MapReduce Programming:** Implementing WordCount with Python mapper/reducer
+3. **Hadoop Streaming:** Integrating Python scripts with Hadoop framework
+4. **Cluster Monitoring:** Understanding HDFS health metrics and fault tolerance
+5. **Scalability Testing:** Running jobs on multiple files with multiple reducers
 
-## License
-
-This project is for educational and demonstration purposes.
+The classic WordCount application serves as a foundation for understanding distributed computing principles applicable to more complex big data analytics tasks.
 
 ---
 
-## Contact & Support
+## References
 
-For questions or issues, please refer to the official documentation:
-- [Apache Spark Documentation](https://spark.apache.org/docs/3.2.1/)
-- [Apache Hadoop Documentation](https://hadoop.apache.org/docs/)
-- [PySpark API Reference](https://spark.apache.org/docs/3.2.1/api/python/)
+- [Apache Hadoop Documentation](https://hadoop.apache.org/docs/r3.3.2/)
+- [Hadoop Streaming Guide](https://hadoop.apache.org/docs/stable/hadoop-streaming/HadoopStreaming.html)
+- [HDFS Architecture](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html)
+- [MapReduce Tutorial](https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html)
 
 ---
 
-**Last Updated:** November 8, 2025  
-**Project Status:** ✅ Completed and Tested
+**Lab Completed:** November 8, 2025  
+**Status:** ✅ All Objectives Achieved  
+**Instructor:** I. BOULEGHLIMAT
+
+---
+
+## Appendix: Additional Notes
+
+### Differences Between MapReduce and Spark
+
+Based on the experiments performed:
+
+| Aspect | MapReduce | Spark |
+|--------|-----------|-------|
+| **Processing** | Disk-based | In-memory |
+| **Speed** | Slower | 10-100x faster |
+| **API** | Java, Streaming | Scala, Python, Java, R |
+| **Ease of Use** | More verbose | More concise |
+| **Use Case** | Batch processing | Batch + streaming + ML |
+
+### Best Practices
+
+1. **Always test scripts locally** before running on cluster
+2. **Use meaningful output directory names** for result organization
+3. **Monitor cluster health** during long-running jobs
+4. **Clean up output directories** before re-running jobs
+5. **Use appropriate number of reducers** based on data size
+6. **Implement proper error handling** in mapper/reducer scripts
+
+---
+
+**End of Lab 3 Documentation**
